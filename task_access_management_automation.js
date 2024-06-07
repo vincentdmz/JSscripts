@@ -1,4 +1,3 @@
-
 // ==UserScript==
 // @name         Task Access Management Automation
 // @namespace    http://tampermonkey.net/
