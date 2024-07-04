@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bulk User Creation
 // @namespace    http://tampermonkey.net/
-// @version      1.9
+// @version      2.0
 // @icon         https://static-tarmac.s3.amazonaws.com/img/favicon.ico
 
 // @description  Upload an Excel file to create users and handle multi-step creation process with control switches
@@ -214,6 +214,9 @@
                     console.error('Save and add another button not found on second page.');
                     console.log('HTML of the second page:', document.body.innerHTML);
                 }
+            }).catch((error) => {
+                console.error('Error in handling groups selection:', error);
+                submitNextUser(); // Move to the next user if there's an error
             });
         } else {
             console.error('First name field not found on second page.');
