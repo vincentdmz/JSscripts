@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bulk User Creation
 // @namespace    http://tampermonkey.net/
-// @version      1.8
+// @version      1.9
 // @icon         https://static-tarmac.s3.amazonaws.com/img/favicon.ico
 
 // @description  Upload an Excel file to create users and handle multi-step creation process with control switches
@@ -14,7 +14,7 @@
 (function() {
     'use strict';
 
-    // Initialisation des variables localStorage
+    // Initialize localStorage variables if not already set
     if (localStorage.getItem('onOff') === null) {
         localStorage.setItem('onOff', 'OFF');
     }
@@ -22,23 +22,23 @@
     let users = [];
     let currentIndex = 0;
 
-    // Création et insertion du bouton de téléchargement
+    // Create and insert upload button
     const uploadButton = document.createElement('input');
     uploadButton.type = 'file';
     uploadButton.accept = '.xlsx, .xls';
     uploadButton.id = 'uploadExcel';
     document.querySelector('.content').prepend(uploadButton);
 
-    // Création et insertion du bouton d'arrêt
+    // Create and insert stop button
     const stopButton = document.createElement('button');
     stopButton.textContent = 'Stop';
     stopButton.id = 'stopButton';
     document.querySelector('.content').prepend(stopButton);
 
-    // Gestionnaire d'événement pour le bouton de téléchargement
+    // Event listener for upload button
     uploadButton.addEventListener('change', handleFileUpload);
 
-    // Gestionnaire d'événement pour le bouton d'arrêt
+    // Event listener for stop button
     stopButton.addEventListener('click', () => {
         localStorage.setItem('onOff', 'OFF');
         console.log('Script stopped manually.');
@@ -74,7 +74,7 @@
             return;
         }
 
-        // Récupérer les utilisateurs et currentIndex depuis le stockage local
+        // Retrieve users and currentIndex from localStorage
         users = JSON.parse(localStorage.getItem('users')) || [];
         currentIndex = parseInt(localStorage.getItem('currentIndex'), 10) || 0;
 
@@ -90,7 +90,7 @@
         localStorage.setItem('currentIndex', (currentIndex + 1).toString());
 
         if (window.location.pathname.includes('/add/')) {
-            // Première page : ajout d'utilisateur
+            // First page: Add user
             if (document.getElementById('id_username')) {
                 console.log('Filling first page for user:', user.username);
                 document.getElementById('id_username').value = user.username;
@@ -108,7 +108,7 @@
                 console.error('Username field not found on first page.');
             }
         } else {
-            // Deuxième page : ajout d'informations supplémentaires
+            // Second page: Additional user information
             console.log('Trying to fill second page for user:', user.username);
             fillAdditionalInfo(user);
         }
@@ -127,7 +127,7 @@
             document.getElementById('id_last_name').value = user.lastName;
             document.getElementById('id_email').value = user.email;
 
-            // Remplir les champs supplémentaires
+            // Fill additional fields
             if (document.getElementById('id_company')) {
                 const select = document.getElementById('id_company');
                 for (const option of select.options) {
@@ -156,7 +156,7 @@
                 console.error('Position field not found on second page.');
             }
 
-            // Traitement des groupes d'affaires avec préfixage
+            // Handle business groups with prefixing
             const allBusinessGroups = [];
             if (user.businessGroupsAirports) {
                 allBusinessGroups.push(...user.businessGroupsAirports.split(',').map(group => 'AIRPORT ' + group.trim()));
@@ -179,7 +179,7 @@
                 console.error('Business group field not found on second page.');
             }
 
-            // Traitement des groupes d'affaires de l'entreprise
+            // Handle company business groups
             if (document.getElementById('id_company_business_groups')) {
                 const companyBusinessGroups = user.companyBusinessGroups.split(',').map(group => group.trim());
                 console.log('Company Business Groups to select:', companyBusinessGroups);
@@ -195,21 +195,21 @@
                 console.error('Company business group field not found on second page.');
             }
 
-            // Extraire les groupes des positions des groupes d'affaires
+            // Extract position groups from business groups
             const positionGroups = user.businessGroupsPositions ? user.businessGroupsPositions.split(',').map(group => group.trim().replace('POSITION ', '')) : [];
             localStorage.setItem('positionGroups', JSON.stringify(positionGroups));
 
-            // Sélectionner et déplacer les groupes dans le bon champ
+            // Select and move groups to the correct field
             handleGroupsSelection().then(() => {
-                // Soumettre le formulaire
+                // Submit form
                 const saveAndAddAnotherButton = document.querySelector('input[name="_addanother"]');
                 if (saveAndAddAnotherButton) {
                     console.log('Submitting second page for user:', user.username);
                     saveAndAddAnotherButton.click();
-                    // Attendre le rechargement de la page et passer à l'utilisateur suivant
+                    // Wait for page reload and move to the next user
                     setTimeout(() => {
                         handleNewPage();
-                    }, 2000); // Attendre 2 secondes pour s'assurer que la page est bien rechargée
+                    }, 2000); // Wait for 2 seconds to ensure page reload
                 } else {
                     console.error('Save and add another button not found on second page.');
                     console.log('HTML of the second page:', document.body.innerHTML);
@@ -234,7 +234,7 @@
                 const currentIndexFromStorage = parseInt(localStorage.getItem('currentIndex'), 10) - 1;
                 fillAdditionalInfo(usersFromStorage[currentIndexFromStorage]);
             }
-            checkForGroupElements();
+            checkForGroupElements(); // Ensure groups selection is checked on every page
         }
     }
 
@@ -246,7 +246,7 @@
                 clearInterval(interval);
                 handleGroupsSelection();
             }
-        }, 500); // Vérifier toutes les 500ms
+        }, 500); // Check every 500ms
     }
 
     function handleGroupsSelection() {
@@ -261,49 +261,51 @@
                     console.log('Available groups:', Array.from(availableGroupsSelect.options).map(opt => ({text: opt.text, value: opt.value})));
                     console.log('Position groups to select:', positionGroups);
 
-                    // Sélectionner les options appropriées dans les groupes disponibles et les déplacer vers les groupes choisis
-                    const optionsToMove = [];
+                    // Select the appropriate options in available groups
                     for (const option of availableGroupsSelect.options) {
                         if (positionGroups.includes(option.text)) {
-                            optionsToMove.push(option);
+                            option.selected = true;
+                            simulateDoubleClick(option);
                         }
                     }
 
-                    for (const option of optionsToMove) {
-                        chosenGroupsSelect.appendChild(option);
-                    }
+                    // Wait for the groups to be moved
+                    setTimeout(() => {
+                        const chosenGroupsTexts = Array.from(chosenGroupsSelect.options).map(opt => opt.text);
+                        if (positionGroups.every(group => chosenGroupsTexts.includes(group))) {
+                            console.log('All position groups were successfully moved.');
+                            resolve();
+                        } else {
+                            console.log('Some position groups were not moved. Retrying...');
+                            handleGroupsSelection().then(resolve).catch(reject); // Retry if some groups were not moved
+                        }
+                    }, 1000); // Wait for 1 second to ensure the groups are moved
 
-                    // Mettre à jour les valeurs sélectionnées
-                    updateSelectedGroups(chosenGroupsSelect);
-
-                    // Déclencher un événement de changement pour forcer la mise à jour du formulaire
-                    chosenGroupsSelect.dispatchEvent(new Event('change', { bubbles: true }));
-
-                    // Vérifier si tous les groupes de positions ont été déplacés
-                    const chosenGroupsTexts = Array.from(chosenGroupsSelect.options).map(opt => opt.text);
-                    if (positionGroups.every(group => chosenGroupsTexts.includes(group))) {
-                        console.log('All position groups were successfully moved.');
-                        resolve();
-                    } else {
-                        console.log('Some position groups were not moved. Retrying...');
-                        handleGroupsSelection().then(resolve).catch(reject); // Réessayer si certains groupes n'ont pas été déplacés
-                    }
                 } else {
                     console.error('Group selection elements not found on the page.');
                     reject(new Error('Group selection elements not found on the page.'));
                 }
-            }, 500); // Vérifier toutes les 500ms
+            }, 500); // Check every 500ms
         });
     }
 
+    function simulateDoubleClick(element) {
+        const event = new MouseEvent('dblclick', {
+            bubbles: true,
+            cancelable: true,
+            view: window
+        });
+        element.dispatchEvent(event);
+    }
+
     function updateSelectedGroups(chosenGroupsSelect) {
-        // Récupérer toutes les options actuellement sélectionnées
+        // Retrieve all currently selected options
         const selectedOptions = Array.from(chosenGroupsSelect.options).filter(option => option.selected);
 
-        // Décocher toutes les options
+        // Uncheck all options
         Array.from(chosenGroupsSelect.options).forEach(option => option.selected = false);
 
-        // Cocher uniquement les options nécessaires
+        // Check only the necessary options
         selectedOptions.forEach(option => option.selected = true);
     }
 
