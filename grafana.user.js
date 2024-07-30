@@ -11,8 +11,7 @@
 (function() {
     'use strict';
 
-    const hookdeckProxyUrl = 'https://hkdk.events/s4j6kdyd0jgc0b';
-    const slackWebhookUrl = 'https://hooks.slack.com/services/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';
+
 
     // Demande le nom de l'utilisateur s'il n'est pas déjà stocké
     function getUserName() {
