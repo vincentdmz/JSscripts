@@ -5,13 +5,12 @@
 // @description  Envoie un message Slack après une modification sur Grafana via Hookdeck Proxy avec possibilité d'ajouter un commentaire personnalisé, le nom de l'auteur et des boutons pour valider ou non la requête
 // @author       Your Name
 // @match        https://analytics.tarmactechnologies.com/*
+// @icon https://static-tarmac.s3.amazonaws.com/img/favicon.ico
 // @grant        none
 // ==/UserScript==
 
 (function() {
     'use strict';
-
-
 
     // Demande le nom de l'utilisateur s'il n'est pas déjà stocké
     function getUserName() {
@@ -24,6 +23,19 @@
         }
         return userName;
     }
+
+        // Demande le nom de l'utilisateur s'il n'est pas déjà stocké
+    function getHookDeckProxyUrl() {
+        let hookdeckProxyUrl = localStorage.getItem('hookdeckProxyUrl');
+        if (!hookdeckProxyUrl) {
+            hookdeckProxyUrl = prompt('Please enter the proxy URL:');
+            if (hookdeckProxyUrl) {
+                localStorage.setItem('hookdeckProxyUrl', hookdeckProxyUrl);
+            }
+        }
+        return hookdeckProxyUrl;
+    }
+
 
     // Récupère le fil d'Ariane
     function getBreadcrumbs() {
@@ -104,6 +116,7 @@
 
     function notifySlack(modification) {
         const userName = getUserName();
+        const hookdeckProxyUrl = getHookDeckProxyUrl();
         const dashboardUrl = window.location.href;
         const breadcrumbs = getBreadcrumbs();
         const organization = getOrganization();
@@ -153,8 +166,7 @@
         fetch(hookdeckProxyUrl, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'X-Hookdeck-Forward-To': slackWebhookUrl
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify(payload)
         })
