@@ -2,7 +2,7 @@
 // @name         Tarmac Technologies Enhanced Click Handler
 // @namespace    http://tampermonkey.net/
 // @description  Enhance click area to open a URL in Tarmac Technologies
-// @version      1.8
+// @version      1.9
 // @match        https://agoa.tarmactechnologies.com/*
 // @icon         https://static-tarmac.s3.amazonaws.com/img/favicon.ico
 // @grant        none
@@ -14,22 +14,35 @@
     console.log('Tarmac Technologies Enhanced Click Handler script loaded');
 
     function openURL(event) {
+        console.log('Click event triggered on:', event.currentTarget);
+
         const target = event.currentTarget;
-        const turnaroundElement = target.closest('.FlightsAndTurnaroundDetailDisplayer');
+        const turnaroundElement = target.closest('.marker');
+
         if (turnaroundElement) {
-            const turnaroundIdElement = turnaroundElement.querySelector('[id^="turnaroundToggle"]');
-            if (turnaroundIdElement) {
-                const turnaroundId = turnaroundIdElement.id.replace('turnaroundToggle', '');
+            console.log('Marker element found:', turnaroundElement);
+
+            // Extracting the turnaround ID from the element's ID
+            const turnaroundId = turnaroundElement.id.replace('turnaroundDetailsMarker', '').replace('turnaroundDetails', '');
+            console.log('Turnaround ID:', turnaroundId);
+
+            if (turnaroundId) {
                 const url = `https://metabase.tarmactechnologies.com/dashboard/7-turnaround-deepdive?turnaround_id=${turnaroundId}`;
                 window.open(url, '_blank');
                 console.log(`URL opened: ${url}`);
+            } else {
+                console.error('No valid Turnaround ID found');
             }
+        } else {
+            console.error('No marker element found');
         }
     }
 
     function addClickHandlers() {
         console.log('Attempting to add click handlers');
-        const markerContainers = document.querySelectorAll('.FlightsAndTurnaroundDetailDisplayer .markerWrapper');
+        const markerContainers = document.querySelectorAll('.station-selected-turnarounds__turnarounds-details__turnaround-details .marker');
+        console.log('Markers found:', markerContainers.length);
+
         markerContainers.forEach(function(container) {
             if (!container.dataset.handlerAdded) {
                 container.dataset.handlerAdded = 'true';
@@ -40,8 +53,8 @@
                 // Create icon element
                 const icon = document.createElement('img');
                 icon.src = 'https://www.ambient-it.net/wp-content/uploads/2024/02/formation-metabase.png';
-                icon.style.width = '20px';
-                icon.style.height = '20px';
+                icon.style.width = '10px';
+                icon.style.height = '10px';
                 icon.style.display = 'none'; // Hide icon initially
                 icon.style.position = 'absolute';
                 icon.style.top = '50%';
@@ -101,14 +114,16 @@
     window.addEventListener('load', initializeScript);
 
     // Retry mechanism to ensure handlers are added
+    let retryCount = 0;
+    const maxRetries = 10;
     const retryInterval = setInterval(() => {
         console.log('Retrying to add click handlers');
         addClickHandlers();
+        retryCount++;
+        
+        if (retryCount >= maxRetries || document.querySelectorAll('.station-selected-turnarounds__turnarounds-details__turnaround-details .marker').length === document.querySelectorAll('.station-selected-turnarounds__turnarounds-details__turnaround-details .marker[data-handler-added="true"]').length) {
+            clearInterval(retryInterval);
+            console.log('Stopped retrying to add handlers');
+        }
     }, 3000);
-
-    // Stop retrying after 30 seconds
-    setTimeout(() => {
-        clearInterval(retryInterval);
-        console.log('Stopped retrying to add handlers');
-    }, 30000);
 })();
