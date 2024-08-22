@@ -2,7 +2,7 @@
 // @name         Tarmac Technologies Enhanced Click Handler
 // @namespace    http://tampermonkey.net/
 // @description  Enhance click area to open a URL in Tarmac Technologies
-// @version      1.9
+// @version      2.0
 // @match        https://agoa.tarmactechnologies.com/*
 // @icon         https://static-tarmac.s3.amazonaws.com/img/favicon.ico
 // @grant        none
@@ -120,7 +120,7 @@
         console.log('Retrying to add click handlers');
         addClickHandlers();
         retryCount++;
-        
+
         if (retryCount >= maxRetries || document.querySelectorAll('.station-selected-turnarounds__turnarounds-details__turnaround-details .marker').length === document.querySelectorAll('.station-selected-turnarounds__turnarounds-details__turnaround-details .marker[data-handler-added="true"]').length) {
             clearInterval(retryInterval);
             console.log('Stopped retrying to add handlers');
