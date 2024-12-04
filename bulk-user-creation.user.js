@@ -1,316 +1,367 @@
 // ==UserScript==
-// @name         Bulk User Creation
+// @name         Add User Automation
 // @namespace    http://tampermonkey.net/
-// @version      2.0
-// @icon         https://static-tarmac.s3.amazonaws.com/img/favicon.ico
-
-// @description  Upload an Excel file to create users and handle multi-step creation process with control switches
+// @version      5.0
+// @description  Automate user creation with robust state management and handling for all fields, including weight and company.
 // @author       Your Name
 // @match        https://admin.tarmactechnologies.com/users/customuser/*
 // @grant        none
-// @require      https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
-    // Initialize localStorage variables if not already set
-    if (localStorage.getItem('onOff') === null) {
-        localStorage.setItem('onOff', 'OFF');
+    // Ajouter les boutons "Upload Excel" et "Stop"
+    function addButtons() {
+        const container = document.querySelector('#content');
+        if (!container) {
+            console.error("Impossible de trouver le conteneur pour ajouter les boutons.");
+            return;
+        }
+
+        if (document.getElementById('uploadExcelButton')) return; // Éviter les doublons
+
+        const uploadButton = document.createElement('button');
+        const stopButton = document.createElement('button');
+        const fileInput = document.createElement('input');
+
+        uploadButton.id = "uploadExcelButton";
+        stopButton.id = "stopButton";
+        fileInput.id = "fileInput";
+
+        uploadButton.innerText = "Upload Excel";
+        stopButton.innerText = "Stop";
+        fileInput.type = "file";
+        fileInput.accept = ".xlsx";
+        fileInput.style.display = "none";
+
+        uploadButton.style.marginRight = "10px";
+
+        uploadButton.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const data = await readExcelFile(file);
+                localStorage.setItem('excelData', JSON.stringify(data));
+                localStorage.setItem('automationState', '1'); // Activer
+                localStorage.setItem('currentRowIndex', '0'); // Réinitialiser à la première ligne
+                alert('Données importées et état activé.');
+                detectPageAndFill(); // Lancer immédiatement après l'upload
+            }
+        });
+
+        stopButton.addEventListener('click', () => {
+            localStorage.setItem('automationState', '0'); // Désactiver
+            alert('État désactivé. Importation arrêtée.');
+        });
+
+        container.prepend(stopButton);
+        container.prepend(uploadButton);
+        container.prepend(fileInput);
     }
 
-    let users = [];
-    let currentIndex = 0;
+    // Lire les données Excel
+    async function readExcelFile(file) {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        return XLSX.utils.sheet_to_json(firstSheet); // Retourne les données au format JSON
+    }
 
-    // Create and insert upload button
-    const uploadButton = document.createElement('input');
-    uploadButton.type = 'file';
-    uploadButton.accept = '.xlsx, .xls';
-    uploadButton.id = 'uploadExcel';
-    document.querySelector('.content').prepend(uploadButton);
+    const script = document.createElement('script');
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js";
+    document.head.appendChild(script);
 
-    // Create and insert stop button
-    const stopButton = document.createElement('button');
-    stopButton.textContent = 'Stop';
-    stopButton.id = 'stopButton';
-    document.querySelector('.content').prepend(stopButton);
+    // Fonction pour vérifier la fin de l'importation
+    function completeImport() {
+        const currentURL = window.location.href;
+        const excelData = JSON.parse(localStorage.getItem('excelData') || '[]');
+        const currentRowIndex = parseInt(localStorage.getItem('currentRowIndex'), 10);
 
-    // Event listener for upload button
-    uploadButton.addEventListener('change', handleFileUpload);
+        if (currentURL.includes('/users/customuser/add/') && currentRowIndex >= excelData.length) {
+            alert('✅ Importation terminée ! Tous les utilisateurs ont été traités avec succès.');
+            console.log('✅ Importation terminée. Processus réinitialisé.');
+            localStorage.setItem('automationState', '0'); // Désactiver
+            localStorage.setItem('currentRowIndex', '0'); // Réinitialiser l'index
+        }
+    }
 
-    // Event listener for stop button
-    stopButton.addEventListener('click', () => {
-        localStorage.setItem('onOff', 'OFF');
-        console.log('Script stopped manually.');
+    // Fonction pour incrémenter l'index uniquement sur la première page
+    function incrementRowIndex() {
+        let currentRowIndex = parseInt(localStorage.getItem('currentRowIndex'), 10);
+        currentRowIndex += 1;
+        localStorage.setItem('currentRowIndex', currentRowIndex.toString());
+        console.log(`Index incrémenté : Nouvel index = ${currentRowIndex}`);
+    }
+
+    // Remplir la première page
+    function fillFirstPageForm() {
+        const automationState = localStorage.getItem('automationState');
+        if (automationState === '1') {
+            const currentRowIndex = parseInt(localStorage.getItem('currentRowIndex'), 10);
+            const excelData = JSON.parse(localStorage.getItem('excelData') || '[]');
+
+            if (currentRowIndex < excelData.length) {
+                const userData = excelData[currentRowIndex];
+                console.log(`Traitement de la première page pour la ligne ${currentRowIndex} :`, userData);
+
+                const usernameField = document.querySelector('#id_username');
+                const password1Field = document.querySelector('#id_password1');
+                const password2Field = document.querySelector('#id_password2');
+
+                if (usernameField && password1Field && password2Field) {
+                    usernameField.value = userData.username || '';
+                    password1Field.value = userData.password || '';
+                    password2Field.value = userData.password || '';
+
+                    console.log(
+                        `Champs remplis (Première Page) : Username = ${userData.username}, Password = ${userData.password}`
+                    );
+
+                    const saveAndContinueButton = document.querySelector('input[name="_continue"]');
+                    if (saveAndContinueButton) {
+                        incrementRowIndex(); // Incrémenter uniquement ici
+                        saveAndContinueButton.click();
+                    } else {
+                        console.error('Bouton "Save and continue editing" introuvable.');
+                    }
+                } else {
+                    console.error('Un ou plusieurs champs de la première page sont introuvables.');
+                }
+            } else {
+                completeImport(); // Vérifier la fin si toutes les lignes ont été traitées
+            }
+        }
+    }
+
+
+function fillSecondPageForm() {
+    const automationState = localStorage.getItem('automationState');
+    if (automationState === '1') {   setTimeout(() => {
+        const currentRowIndex = parseInt(localStorage.getItem('currentRowIndex'), 10);
+        const excelData = JSON.parse(localStorage.getItem('excelData') || '[]');
+
+        if (currentRowIndex > 0 && currentRowIndex - 1 < excelData.length) {
+            const userData = excelData[currentRowIndex - 1];
+            console.log(`Traitement de la seconde page pour la ligne ${currentRowIndex - 1} :`, userData);
+
+            // Champs texte
+            const firstNameField = document.querySelector('#id_first_name');
+            const lastNameField = document.querySelector('#id_last_name');
+            const emailField = document.querySelector('#id_email');
+            const usernameField = document.querySelector('#id_username');
+            const positionField = document.querySelector('#id_position');
+            const companyField = document.querySelector('#id_company');
+            const weightField = document.querySelector('#id_weight');
+            const companyBusinessGroupsField = document.querySelector('#id_company_business_groups');
+            const businessGroupsField = document.querySelector('#id_business_groups');
+            const groupsFieldAvailable = document.querySelector('#id_groups_from'); // Available groups
+            const groupsAddButton = document.querySelector('#id_groups_add_link'); // "Choose" button
+
+
+
+            // Remplir les champs texte
+            if (firstNameField && lastNameField && emailField) {
+                firstNameField.value = userData.firstName || '';
+                lastNameField.value = userData.lastName || '';
+                emailField.value = userData.email || '';
+                console.log(`Champs texte remplis : First Name = ${userData.firstName}, Last Name = ${userData.lastName}, Email = ${userData.email}`);
+            }
+
+            // Remplir le champ Username
+            if (usernameField) {
+                usernameField.value = userData.username || '';
+                console.log(`Username rempli : ${userData.username}`);
+            }
+
+            // Remplir le champ Weight
+            if (weightField) {
+                weightField.value = userData.weight || '';
+                console.log(`Poids rempli : ${userData.weight}`);
+            }
+
+            // Remplir le champ Position
+            if (positionField) {
+                const positionFilled = selectDropdownValue(positionField, userData.position || '');
+                if (!positionFilled) console.error(`Erreur lors du remplissage de la position : ${userData.position}`);
+            }
+
+            // Remplir le champ Company
+            if (companyField) {
+                const companyFilled = selectDropdownValue(companyField, userData.company || '');
+                if (!companyFilled) console.error(`Erreur lors du remplissage de la compagnie : ${userData.company}`);
+            }
+
+           // Remplir le champ Company Business Groups (multiselect)
+if (companyBusinessGroupsField) {
+    const companyBusinessGroups = (userData.companyBusinessGroups || '').split(',').map(group => group.trim().replace(/\s+/g, '')); // Normalisation des espaces
+    const options = companyBusinessGroupsField.options;
+
+    // Réinitialiser les sélections existantes
+    for (let i = 0; i < options.length; i++) {
+        options[i].selected = false;
+    }
+
+    // Sélectionner les groupes
+    companyBusinessGroups.forEach(group => {
+        let found = false;
+        for (let i = 0; i < options.length; i++) {
+            const normalizedOptionText = options[i].textContent.trim().replace(/\s+/g, '');
+            const normalizedOptionValue = options[i].value.trim().replace(/\s+/g, '');
+            const normalizedGroup = group.toUpperCase();
+
+            if (normalizedOptionText.toUpperCase() === normalizedGroup || normalizedOptionValue.toUpperCase() === normalizedGroup) {
+                options[i].selected = true;
+                found = true;
+                console.log(`Company Business Group sélectionné : ${group}`);
+                break;
+            }
+        }
+
+        if (!found) {
+            console.error(`Company Business Group "${group}" introuvable dans le menu déroulant.`);
+        }
     });
+} else {
+    console.error('Champ "Company Business Groups" introuvable.');
+}
 
-    function handleFileUpload(event) {
-        const file = event.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, {type: 'array'});
-                    const firstSheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[firstSheetName];
-                    users = XLSX.utils.sheet_to_json(worksheet);
-                    localStorage.setItem('users', JSON.stringify(users));
-                    localStorage.setItem('currentIndex', '0');
-                    localStorage.setItem('onOff', 'ON');
-                    console.log('Users loaded from file:', users);
-                    submitNextUser();
-                } catch (error) {
-                    console.error('Error reading the file:', error);
+// Sélectionner plusieurs groupes spécifiques dans "Available Groups" et les déplacer avec un double-clic
+if (groupsFieldAvailable) {
+    const targetGroups = (userData.businessGroupsPositions || '').split(',').map(group => group.trim()); // Groupes à sélectionner
+    if (targetGroups.length > 0) {
+        const options = groupsFieldAvailable.options;
+
+        targetGroups.forEach(targetGroup => {
+            let groupFound = false;
+
+            for (let i = 0; i < options.length; i++) {
+                const normalizedOptionText = options[i].textContent.trim().toUpperCase();
+                const normalizedTargetGroup = targetGroup.toUpperCase();
+
+                if (normalizedOptionText === normalizedTargetGroup) {
+                    options[i].selected = true; // Sélectionner le groupe
+                    simulateDoubleClick(options[i]); // Simuler un double-clic pour déplacer le groupe
+                    console.log(`Group déplacé vers "Chosen Groups" : ${targetGroup}`);
+                    groupFound = true;
+                    break;
                 }
-            };
-            reader.readAsArrayBuffer(file);
-        }
-    }
-
-    function submitNextUser() {
-        if (localStorage.getItem('onOff') !== 'ON') {
-            console.log('Script is OFF. Exiting submitNextUser.');
-            return;
-        }
-
-        // Retrieve users and currentIndex from localStorage
-        users = JSON.parse(localStorage.getItem('users')) || [];
-        currentIndex = parseInt(localStorage.getItem('currentIndex'), 10) || 0;
-
-        if (currentIndex >= users.length) {
-            alert('All users have been submitted.');
-            localStorage.setItem('onOff', 'OFF');
-            localStorage.removeItem('users');
-            localStorage.removeItem('currentIndex');
-            return;
-        }
-
-        const user = users[currentIndex];
-        localStorage.setItem('currentIndex', (currentIndex + 1).toString());
-
-        if (window.location.pathname.includes('/add/')) {
-            // First page: Add user
-            if (document.getElementById('id_username')) {
-                console.log('Filling first page for user:', user.username);
-                document.getElementById('id_username').value = user.username;
-                document.getElementById('id_password1').value = user.password;
-                document.getElementById('id_password2').value = user.password;
-
-                const saveButton = document.querySelector('input[name="_save"]');
-                if (saveButton) {
-                    console.log('Submitting first page for user:', user.username);
-                    saveButton.click();
-                } else {
-                    console.error('Save button not found on first page.');
-                }
-            } else {
-                console.error('Username field not found on first page.');
-            }
-        } else {
-            // Second page: Additional user information
-            console.log('Trying to fill second page for user:', user.username);
-            fillAdditionalInfo(user);
-        }
-    }
-
-    function fillAdditionalInfo(user) {
-        if (localStorage.getItem('onOff') !== 'ON') {
-            console.log('Script is OFF. Exiting fillAdditionalInfo.');
-            return;
-        }
-
-        console.log('Filling additional info for user:', user.username);
-        if (document.getElementById('id_first_name')) {
-            console.log('First name field found on second page.');
-            document.getElementById('id_first_name').value = user.firstName;
-            document.getElementById('id_last_name').value = user.lastName;
-            document.getElementById('id_email').value = user.email;
-
-            // Fill additional fields
-            if (document.getElementById('id_company')) {
-                const select = document.getElementById('id_company');
-                for (const option of select.options) {
-                    if (option.text === user.company) {
-                        select.value = option.value;
-                        break;
-                    }
-                }
-            } else {
-                console.error('Company field not found on second page.');
-            }
-            if (document.getElementById('id_weight')) {
-                document.getElementById('id_weight').value = user.weight;
-            } else {
-                console.error('Weight field not found on second page.');
-            }
-            if (document.getElementById('id_position')) {
-                const select = document.getElementById('id_position');
-                for (const option of select.options) {
-                    if (option.text === user.position) {
-                        select.value = option.value;
-                        break;
-                    }
-                }
-            } else {
-                console.error('Position field not found on second page.');
             }
 
-            // Handle business groups with prefixing
-            const allBusinessGroups = [];
-            if (user.businessGroupsAirports) {
-                allBusinessGroups.push(...user.businessGroupsAirports.split(',').map(group => 'AIRPORT ' + group.trim()));
+            if (!groupFound) {
+                console.error(`Group "${targetGroup}" introuvable dans les "Available Groups".`);
             }
-            if (user.businessGroupsAirlines) {
-                allBusinessGroups.push(...user.businessGroupsAirlines.split(',').map(group => 'AIRLINE ' + group.trim()));
-            }
-            if (user.businessGroupsPositions) {
-                allBusinessGroups.push(...user.businessGroupsPositions.split(',').map(group => 'POSITION ' + group.trim()));
-            }
-
-            if (document.getElementById('id_business_groups')) {
-                const select = document.getElementById('id_business_groups');
-                for (const option of select.options) {
-                    if (allBusinessGroups.includes(option.text)) {
-                        option.selected = true;
-                    }
-                }
-            } else {
-                console.error('Business group field not found on second page.');
-            }
-
-            // Handle company business groups
-            if (document.getElementById('id_company_business_groups')) {
-                const companyBusinessGroups = user.companyBusinessGroups.split(',').map(group => group.trim());
-                console.log('Company Business Groups to select:', companyBusinessGroups);
-                const select = document.getElementById('id_company_business_groups');
-                for (const option of select.options) {
-                    console.log('Checking option:', option.text);
-                    if (companyBusinessGroups.includes(option.text)) {
-                        option.selected = true;
-                        console.log('Selected option:', option.text);
-                    }
-                }
-            } else {
-                console.error('Company business group field not found on second page.');
-            }
-
-            // Extract position groups from business groups
-            const positionGroups = user.businessGroupsPositions ? user.businessGroupsPositions.split(',').map(group => group.trim().replace('POSITION ', '')) : [];
-            localStorage.setItem('positionGroups', JSON.stringify(positionGroups));
-
-            // Select and move groups to the correct field
-            handleGroupsSelection().then(() => {
-                // Submit form
-                const saveAndAddAnotherButton = document.querySelector('input[name="_addanother"]');
-                if (saveAndAddAnotherButton) {
-                    console.log('Submitting second page for user:', user.username);
-                    saveAndAddAnotherButton.click();
-                    // Wait for page reload and move to the next user
-                    setTimeout(() => {
-                        handleNewPage();
-                    }, 2000); // Wait for 2 seconds to ensure page reload
-                } else {
-                    console.error('Save and add another button not found on second page.');
-                    console.log('HTML of the second page:', document.body.innerHTML);
-                }
-            }).catch((error) => {
-                console.error('Error in handling groups selection:', error);
-                submitNextUser(); // Move to the next user if there's an error
-            });
-        } else {
-            console.error('First name field not found on second page.');
-            console.log('HTML of the second page:', document.body.innerHTML);
-        }
-    }
-
-    function handleNewPage() {
-        const h1Text = document.querySelector('h1').innerText;
-        console.log('handleNewPage called:', h1Text);
-        if (localStorage.getItem('onOff') === 'ON') {
-            if (window.location.href.includes("https://admin.tarmactechnologies.com/users/customuser/add/")) {
-                console.log('Detected Add user page');
-                submitNextUser();
-            } else {
-                console.log('Detected Personal info page');
-                const usersFromStorage = JSON.parse(localStorage.getItem('users')) || [];
-                const currentIndexFromStorage = parseInt(localStorage.getItem('currentIndex'), 10) - 1;
-                fillAdditionalInfo(usersFromStorage[currentIndexFromStorage]);
-            }
-            checkForGroupElements(); // Ensure groups selection is checked on every page
-        }
-    }
-
-    function checkForGroupElements() {
-        const interval = setInterval(() => {
-            const availableGroupsSelect = document.getElementById('id_groups_from');
-            const chosenGroupsSelect = document.getElementById('id_groups_to');
-            if (availableGroupsSelect && chosenGroupsSelect) {
-                clearInterval(interval);
-                handleGroupsSelection();
-            }
-        }, 500); // Check every 500ms
-    }
-
-    function handleGroupsSelection() {
-        return new Promise((resolve, reject) => {
-            const interval = setInterval(() => {
-                const availableGroupsSelect = document.getElementById('id_groups_from');
-                const chosenGroupsSelect = document.getElementById('id_groups_to');
-                if (availableGroupsSelect && chosenGroupsSelect) {
-                    clearInterval(interval);
-
-                    const positionGroups = JSON.parse(localStorage.getItem('positionGroups')) || [];
-                    console.log('Available groups:', Array.from(availableGroupsSelect.options).map(opt => ({text: opt.text, value: opt.value})));
-                    console.log('Position groups to select:', positionGroups);
-
-                    // Select the appropriate options in available groups
-                    for (const option of availableGroupsSelect.options) {
-                        if (positionGroups.includes(option.text)) {
-                            option.selected = true;
-                            simulateDoubleClick(option);
-                        }
-                    }
-
-                    // Wait for the groups to be moved
-                    setTimeout(() => {
-                        const chosenGroupsTexts = Array.from(chosenGroupsSelect.options).map(opt => opt.text);
-                        if (positionGroups.every(group => chosenGroupsTexts.includes(group))) {
-                            console.log('All position groups were successfully moved.');
-                            resolve();
-                        } else {
-                            console.log('Some position groups were not moved. Retrying...');
-                            handleGroupsSelection().then(resolve).catch(reject); // Retry if some groups were not moved
-                        }
-                    }, 1000); // Wait for 1 second to ensure the groups are moved
-
-                } else {
-                    console.error('Group selection elements not found on the page.');
-                    reject(new Error('Group selection elements not found on the page.'));
-                }
-            }, 500); // Check every 500ms
         });
+    } else {
+        console.error('Aucun groupe spécifié dans les données.');
+    }
+} else {
+    console.error('Champ "Available Groups" introuvable.');
+}
+
+
+
+            // Remplir le champ Business Groups (multiselect)
+            if (businessGroupsField) {
+                // Préfixes pour chaque type de groupe
+                const groupsAirports = (userData.businessGroupsAirports || '').split(',').map(group => `AIRPORT  ${group.trim()}`);
+                const groupsAirlines = (userData.businessGroupsAirlines || '').split(',').map(group => `AIRLINE  ${group.trim()}`);
+                const allGroups = [...groupsAirports, ...groupsAirlines];
+                fillMultiselectField(businessGroupsField, allGroups.join(','));
+            }
+
+            // Sauvegarder et continuer
+            const saveAndAddAnotherButton = document.querySelector('input[name="_addanother"]');
+            if (saveAndAddAnotherButton) {
+                saveAndAddAnotherButton.click();
+            } else {
+                console.error('Bouton "Save and add another" introuvable.');
+            }
+        }
+         }, 2000);
+    }
+}
+
+// Fonction pour sélectionner une valeur dans un menu déroulant
+function selectDropdownValue(selectElement, value) {
+    if (!selectElement) {
+        console.error('Menu déroulant introuvable.');
+        return false;
     }
 
-    function simulateDoubleClick(element) {
-        const event = new MouseEvent('dblclick', {
-            bubbles: true,
-            cancelable: true,
-            view: window
-        });
-        element.dispatchEvent(event);
+    const options = selectElement.querySelectorAll('option');
+    for (let option of options) {
+        if (option.textContent.trim() === value || option.value === value) {
+            option.selected = true;
+            console.log(`Option sélectionnée : ${option.textContent}`);
+            return true;
+        }
     }
 
-    function updateSelectedGroups(chosenGroupsSelect) {
-        // Retrieve all currently selected options
-        const selectedOptions = Array.from(chosenGroupsSelect.options).filter(option => option.selected);
+    console.error(`Valeur "${value}" introuvable dans le menu déroulant.`);
+    return false;
+}
 
-        // Uncheck all options
-        Array.from(chosenGroupsSelect.options).forEach(option => option.selected = false);
-
-        // Check only the necessary options
-        selectedOptions.forEach(option => option.selected = true);
+// Fonction pour remplir un champ multisélection
+function fillMultiselectField(multiselectElement, values) {
+    if (!multiselectElement) {
+        console.error('Champ multisélection introuvable.');
+        return;
     }
 
-    window.addEventListener('load', handleNewPage);
+    const valueArray = values.split(',').map(val => val.trim().toUpperCase());
+    const options = multiselectElement.options;
+
+    // Réinitialiser toutes les options
+    for (let i = 0; i < options.length; i++) {
+        options[i].selected = false;
+    }
+
+    // Sélectionner les valeurs correspondantes
+    valueArray.forEach(value => {
+        let found = false;
+        for (let i = 0; i < options.length; i++) {
+            const normalizedOptionText = options[i].textContent.trim().toUpperCase();
+            const normalizedOptionValue = options[i].value.trim().toUpperCase();
+
+            if (normalizedOptionText === value || normalizedOptionValue === value) {
+                options[i].selected = true;
+                found = true;
+                console.log(`Valeur sélectionnée : ${value}`);
+                break;
+            }
+        }
+
+        if (!found) {
+            console.error(`Valeur "${value}" introuvable dans le champ multisélection.`);
+        }
+    });
+}
+
+// Fonction pour simuler un double-clic sur un élément
+function simulateDoubleClick(element) {
+    if (!element) return;
+    const event = new MouseEvent('dblclick', {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+    });
+    element.dispatchEvent(event);
+}
+
+    // Détecter la page et agir
+    function detectPageAndFill() {
+        const currentURL = window.location.href;
+
+        if (currentURL.includes('/users/customuser/add/')) {
+            console.log('Page détectée : Première page');
+            addButtons();
+            fillFirstPageForm();
+        } else if (currentURL.includes('/users/customuser/') && !currentURL.includes('/add/')) {
+            console.log('Page détectée : Seconde page');
+            fillSecondPageForm();
+        }
+    }
+
+    detectPageAndFill();
 })();
